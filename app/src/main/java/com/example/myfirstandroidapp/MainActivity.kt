@@ -27,6 +27,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,55 +62,70 @@ fun BooksScreen(modifier: Modifier = Modifier) {
     var message by remember {
         mutableStateOf("Escribe un título o tema para buscar.")
     }
+    var selectedBook by remember { mutableStateOf<Book?>(null) }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Text(
-            text = "Libros",
-            style = MaterialTheme.typography.headlineMedium
+    if (selectedBook != null) {
+        BookDetailScreen(
+            book = selectedBook!!,
+            modifier = modifier,
+            onBack = { selectedBook = null }
         )
+    } else {
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Libros",
+                style = MaterialTheme.typography.headlineMedium
+            )
 
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
-            label = { Text("Título o tema") },
-            modifier = Modifier.fillMaxWidth()
-        )
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                label = { Text("Título o tema") },
+                modifier = Modifier.fillMaxWidth()
+            )
 
-        Button(
-            onClick = {
-                if (query.isNotBlank()) {
-                    message = "Buscando…"
-                    searchBooks(query) { results ->
-                        books = results
-                        message = if (results.isEmpty()) {
-                            "No encontré resultados. Intenta otra búsqueda."
-                        } else {
-                            ""
+            Button(
+                onClick = {
+                    if (query.isNotBlank()) {
+                        message = "Buscando…"
+                        searchBooks(query) { results ->
+                            books = results
+                            message = if (results.isEmpty()) {
+                                "No encontré resultados. Intenta otra búsqueda."
+                            } else {
+                                ""
+                            }
                         }
                     }
                 }
+            ) {
+                Text("Buscar")
             }
-        ) {
-            Text("Buscar")
-        }
 
-        if (message.isNotEmpty()) {
-            Text(text = message)
-        }
+            if (message.isNotEmpty()) {
+                Text(text = message)
+            }
 
-        LazyColumn(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(books) { book ->
-                Text(text = "${book.title} — ${book.author}")
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(books) { book ->
+                    Text(
+                        text = "${book.title}\n${book.author}",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selectedBook = book }
+                            .padding(vertical = 8.dp)
+                    )
+                }
             }
         }
     }
@@ -113,9 +139,127 @@ fun BooksScreenPreview() {
     }
 }
 
+@Composable
+fun BookDetailScreen(
+    book: Book,
+    modifier: Modifier = Modifier,
+    onBack: () -> Unit
+) {
+    var description by remember(book.workId) {
+        mutableStateOf<String?>(null)
+    }
+    var isLoading by remember(book.workId) {
+        mutableStateOf(true)
+    }
+
+    LaunchedEffect(book.workId) {
+        loadBookDescription(book.workId) { result ->
+            description = result
+            isLoading = false
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        TextButton(
+            onClick = onBack,
+            modifier = Modifier.align(Alignment.Start)
+        ) {
+            Text("← Volver")
+        }
+
+        if (book.coverId != null) {
+            AsyncImage(
+                model = "https://covers.openlibrary.org/b/id/${book.coverId}-L.jpg",
+                contentDescription = "Portada de ${book.title}",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(280.dp),
+                contentScale = ContentScale.Fit
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Portada no disponible")
+            }
+        }
+
+        Text(
+            text = book.title,
+            style = MaterialTheme.typography.headlineSmall
+        )
+        Text(text = "Autor: ${book.author}")
+
+        book.firstPublishYear?.let { year ->
+            Text(text = "Primera publicación: $year")
+        }
+
+        Text(
+            text = "Descripción",
+            style = MaterialTheme.typography.titleLarge
+        )
+
+        when {
+            isLoading -> Text("Cargando descripción…")
+            description.isNullOrBlank() -> Text("Descripción no disponible.")
+            else -> Text(description.orEmpty())
+        }
+    }
+}
+
+fun loadBookDescription(
+    workId: String,
+    onResult: (String?) -> Unit
+) {
+    Thread {
+        val result = try {
+            val url = URL("https://openlibrary.org/works/$workId.json")
+            val connection = url.openConnection() as HttpURLConnection
+
+            try {
+                connection.requestMethod = "GET"
+                connection.connectTimeout = 10_000
+                connection.readTimeout = 10_000
+
+                val response = connection.inputStream
+                    .bufferedReader()
+                    .use { it.readText() }
+
+                when (val value = JSONObject(response).opt("description")) {
+                    is String -> value
+                    is JSONObject -> value.optString("value")
+                        .takeIf { it.isNotBlank() }
+                    else -> null
+                }
+            } finally {
+                connection.disconnect()
+            }
+        } catch (_: Exception) {
+            null
+        }
+
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            onResult(result)
+        }
+    }.start()
+}
+
 data class Book(
+    val workId: String,
     val title: String,
     val author: String,
+    val firstPublishYear: Int?,
     val coverId: Int?
 )
 
@@ -124,7 +268,7 @@ fun searchBooks(query: String, onResult: (List<Book>) -> Unit) {
         val books = try {
             val encodedQuery = URLEncoder.encode(query, "UTF-8")
             val url = URL(
-                "https://openlibrary.org/search.json?q=$encodedQuery&limit=20"
+                "https://openlibrary.org/search.json?q=$encodedQuery&fields=key,title,author_name,first_publish_year,cover_i&limit=20"
             )
             val connection = url.openConnection() as HttpURLConnection
 
@@ -141,13 +285,12 @@ fun searchBooks(query: String, onResult: (List<Book>) -> Unit) {
                     val authors = item.optJSONArray("author_name")
 
                     Book(
+                        workId = item.optString("key").substringAfterLast('/'),
                         title = item.optString("title", "Sin título"),
-                        author = authors?.optString(0) ?: "Autor desconocido",
-                        coverId = if (item.has("cover_i")) {
-                            item.optInt("cover_i")
-                        } else {
-                            null
-                        }
+                        author = item.optJSONArray("author_name")?.optString(0)
+                            ?: "Autor desconocido",
+                        firstPublishYear = item.optInt("first_publish_year").takeIf { it != 0 },
+                        coverId = item.optInt("cover_i").takeIf { it != 0 }
                     )
                 }
             } finally {
