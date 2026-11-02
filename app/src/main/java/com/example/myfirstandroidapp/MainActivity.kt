@@ -23,6 +23,10 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import androidx.compose.material3.Button
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -44,9 +48,16 @@ class MainActivity : ComponentActivity() {
 fun BooksScreen(modifier: Modifier = Modifier) {
     var query by remember { mutableStateOf("") }
     var books by remember { mutableStateOf<List<Book>>(emptyList()) }
-    var message by remember { mutableStateOf("Escribe un título o tema para buscar.") }
+    var message by remember {
+        mutableStateOf("Escribe un título o tema para buscar.")
+    }
 
-    Column(modifier = modifier.padding(24.dp)) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
         Text(
             text = "Libros",
             style = MaterialTheme.typography.headlineMedium
@@ -72,24 +83,24 @@ fun BooksScreen(modifier: Modifier = Modifier) {
                         }
                     }
                 }
-            },
-            modifier = Modifier.padding(top = 8.dp)
+            }
         ) {
             Text("Buscar")
         }
 
         if (message.isNotEmpty()) {
-            Text(
-                text = message,
-                modifier = Modifier.padding(top = 16.dp)
-            )
+            Text(text = message)
         }
 
-        books.forEach { book ->
-            Text(
-                text = "${book.title} — ${book.author}",
-                modifier = Modifier.padding(top = 12.dp)
-            )
+        LazyColumn(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(books) { book ->
+                Text(text = "${book.title} — ${book.author}")
+            }
         }
     }
 }
