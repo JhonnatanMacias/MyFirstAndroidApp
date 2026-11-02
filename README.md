@@ -23,8 +23,31 @@ Aplicación Android para buscar libros en [Open Library](https://openlibrary.org
 
 - Kotlin
 - Jetpack Compose y Material 3
+- ViewModel y StateFlow para mantener y exponer el estado de la pantalla
+- Coroutines para ejecutar las solicitudes de red fuera del hilo principal
 - Coil 3 para cargar las portadas
 - Open Library Search API para buscar libros y API de obras para consultar descripciones
+
+## Arquitectura
+
+La interfaz está separada del acceso a datos. `MainActivity` crea el ViewModel y conecta la ruta Compose; las pantallas reciben el estado y notifican acciones mediante callbacks.
+
+```text
+MainActivity
+    └── BooksRoute
+        ├── BooksScreen / BookDetailScreen
+        └── BooksViewModel ── BookRepository
+                                  └── OpenLibraryBookRepository
+```
+
+- `model/Book.kt`: modelo de libro usado por la aplicación.
+- `data/BookRepository.kt`: contrato para buscar libros y obtener descripciones.
+- `data/OpenLibraryBookRepository.kt`: implementación que consulta Open Library y convierte las respuestas JSON en modelos. Usa coroutines en `Dispatchers.IO`.
+- `ui/books/BooksViewModel.kt`: coordina búsquedas, selección y carga de descripción; publica `BooksUiState` mediante `StateFlow`.
+- `ui/books/BooksScreen.kt` y `BookDetailScreen.kt`: componentes Compose que muestran el estado y envían acciones.
+- `ui/books/BooksRoute.kt`: conecta el ViewModel con las pantallas.
+
+El flujo de datos va desde una acción de la UI al ViewModel, luego al repositorio y vuelve como un nuevo estado que Compose observa. El repositorio se entrega al ViewModel mediante una factory sencilla, así que la app mantiene la arquitectura desacoplada sin añadir un framework de inyección de dependencias.
 
 ## Ejecutar el proyecto
 
